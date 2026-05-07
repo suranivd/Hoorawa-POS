@@ -13,18 +13,30 @@ import Card from '../components/ui/Card';
 import KpiCard from '../components/ui/KpiCard';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
+import { useAuthStore } from '../store/authStore';
+import { Calendar } from 'lucide-react';
 import {
     useDashboardKpis, useRevenueChart, useTopProducts, useTopCustomers,
 } from '../features/reports/useReports';
 
 export default function DashboardPage() {
     const navigate = useNavigate();
+    const { user } = useAuthStore();
     const { data: kpisData, isLoading } = useDashboardKpis();
     const { data: revenueData } = useRevenueChart(6);
     const { data: topProductsData } = useTopProducts({ period: 'month', limit: 5 });
     const { data: topCustomersData } = useTopCustomers({ period: 'month', limit: 5 });
 
     const k = kpisData?.data;
+
+    const getTimeGreeting = () => {
+        const hour = new Date().getHours();
+        if (hour < 12) return 'Good Morning';
+        if (hour < 18) return 'Good Afternoon';
+        return 'Good Evening';
+    };
+
+    const fmtDate = (d) => new Intl.DateTimeFormat('en-LK', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(d);
 
     const fmt = (n) => new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR', minimumFractionDigits: 0 }).format(n || 0);
     const fmtShort = (n) => {
@@ -37,23 +49,38 @@ export default function DashboardPage() {
 
     return (
         <div>
-            <PageHeader title="Dashboard" description="Real-time overview of your business" />
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">
+                        {getTimeGreeting()}, <span className="text-indigo-600">{user?.firstName}!</span>
+                    </h1>
+                    <p className="text-gray-500 text-sm mt-1 flex items-center gap-2">
+                        Here's what's happening with your store today
+                    </p>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-100 rounded-xl shadow-sm text-sm font-medium text-gray-600">
+                    <Calendar size={16} className="text-gray-400" />
+                    {fmtDate(new Date())}
+                </div>
+            </div>
 
             {/* Primary KPIs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <KpiCard
                     label="Revenue This Month" value={fmtShort(k.revenue.thisMonth)}
                     icon={DollarSign} iconColor="text-green-600" iconBg="bg-green-50"
-                    trend={k.revenue.growth}
+                    trend={k.revenue.growth} accentColor="bg-green-500"
                     subtext={`${k.revenue.invoiceCount} invoices`} />
                 <KpiCard
                     label="Orders Today" value={k.orders.today}
                     icon={ShoppingCart} iconColor="text-blue-600" iconBg="bg-blue-50"
+                    accentColor="bg-blue-500"
                     subtext={`${k.orders.thisMonth} this month`}
                     onClick={() => navigate('/sales-orders')} />
                 <KpiCard
                     label="Outstanding Receivables" value={fmtShort(k.receivables.total)}
                     icon={CreditCard} iconColor="text-amber-600" iconBg="bg-amber-50"
+                    accentColor="bg-amber-500"
                     subtext={k.receivables.overdueCount > 0
                         ? `${fmtShort(k.receivables.overdue)} overdue (${k.receivables.overdueCount})`
                         : 'No overdue'}
@@ -61,6 +88,7 @@ export default function DashboardPage() {
                 <KpiCard
                     label="Low Stock Alerts" value={k.stock.lowStockCount}
                     icon={AlertTriangle} iconColor="text-red-600" iconBg="bg-red-50"
+                    accentColor="bg-red-500"
                     subtext="Products at or below reorder level"
                     onClick={() => navigate('/reports/inventory/low-stock')} />
             </div>
@@ -68,14 +96,14 @@ export default function DashboardPage() {
             {/* Secondary KPIs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <KpiCard label="Pending Approvals" value={k.orders.pendingApproval}
-                    icon={FileText} iconColor="text-indigo-600" iconBg="bg-indigo-50" />
+                    icon={FileText} iconColor="text-indigo-600" iconBg="bg-indigo-50" accentColor="bg-indigo-500" />
                 <KpiCard label="Pending Dispatch" value={k.orders.pendingDispatch}
-                    icon={Package} iconColor="text-purple-600" iconBg="bg-purple-50" />
+                    icon={Package} iconColor="text-purple-600" iconBg="bg-purple-50" accentColor="bg-purple-500" />
                 <KpiCard label="Active Production" value={k.production.active}
-                    icon={Factory} iconColor="text-pink-600" iconBg="bg-pink-50"
+                    icon={Factory} iconColor="text-pink-600" iconBg="bg-pink-50" accentColor="bg-pink-500"
                     subtext={`${k.production.completedThisMonth} completed this month`} />
                 <KpiCard label="Active Customers" value={k.customers.total}
-                    icon={Users} iconColor="text-cyan-600" iconBg="bg-cyan-50"
+                    icon={Users} iconColor="text-cyan-600" iconBg="bg-cyan-50" accentColor="bg-cyan-400"
                     subtext={`${k.customers.newThisMonth} new this month`} />
             </div>
 

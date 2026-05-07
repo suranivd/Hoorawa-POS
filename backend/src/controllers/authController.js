@@ -182,7 +182,7 @@ export const changePassword = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user._id).select('+password');
     if (!user) { res.status(404); throw new Error('User not found'); }
 
-    const isMatch = await user.comparePassword(currentPassword);
+    const isMatch = await user.matchPassword(currentPassword);
     if (!isMatch) {
         res.status(401);
         throw new Error('Current password is incorrect');
@@ -192,4 +192,58 @@ export const changePassword = asyncHandler(async (req, res) => {
     await user.save();
 
     res.json({ success: true, message: 'Password changed successfully' });
+});
+
+/**
+ * @desc    Verify admin credentials for sensitive actions
+ * @route   POST /api/auth/verify-admin
+ * @access  Private
+ */
+export const verifyAdmin = asyncHandler(async (req, res) => {
+    const { password, adminEmail } = req.body;
+
+    if (!password) {
+        res.status(400);
+        throw new Error('Admin password is required');
+    }
+
+    const user = await User.findById(req.user._id).select('+password');
+
+    if (!user || user.role !== 'admin') {
+        if (!adminEmail) {
+            res.status(403);
+            throw new Error('Not authorized as admin. Please provide admin credentials.');
+        }
+
+        const admin = await User.findOne({ email: adminEmail, role: 'admin', isActive: true }).select('+password');
+        if (!admin) {
+            res.status(401);
+            throw new Error('Invalid admin credentials');
+        }
+
+        const isMatch = await admin.matchPassword(password);
+        if (!isMatch) {
+            res.status(401);
+            throw new Error('Invalid admin credentials');
+        }
+
+        return res.json({
+            success: true,
+            message: 'Admin verification successful',
+            data: { adminId: admin._id, adminName: admin.fullName }
+        });
+    }
+
+    // If current user IS admin, just check their password
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+        res.status(401);
+        throw new Error('Invalid password');
+    }
+
+    res.json({
+        success: true,
+        message: 'Admin verification successful',
+        data: { adminId: user._id, adminName: user.fullName }
+    });
 });

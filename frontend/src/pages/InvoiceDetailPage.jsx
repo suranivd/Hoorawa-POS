@@ -9,6 +9,8 @@ import Badge from '../components/ui/Badge';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useInvoice, useChangeInvoiceStatus } from '../features/invoices/useInvoices';
 import { useAuthStore } from '../store/authStore';
+import AdminVerificationModal from '../features/auth/AdminVerificationModal';
+import { useAdminVerify } from '../features/auth/useAdminVerify';
 
 import { useRef } from 'react';
 import PrintableInvoice from '../components/print/PrintableInvoice';
@@ -30,6 +32,7 @@ export default function InvoiceDetailPage() {
     const { data, isLoading } = useInvoice(id);
     const changeStatus = useChangeInvoiceStatus();
     const inv = data?.data;
+    const { isVerifyModalOpen, requestAdminVerify, handleVerified, closeVerifyModal } = useAdminVerify();
 
     // Fetch payments allocated to this invoice
     const { data: paymentsData } = useQuery({
@@ -60,8 +63,18 @@ export default function InvoiceDetailPage() {
     }
 
     const handleAction = async () => {
-        await changeStatus.mutateAsync({ id: inv._id, status: action.status, reason });
-        setAction(null); setReason('');
+        if (action.status === 'cancelled') {
+            requestAdminVerify(async () => {
+                await changeStatus.mutateAsync({ id: inv._id, status: action.status, reason });
+                setAction(null); setReason('');
+            }, {
+                title: "Authorize Cancellation",
+                message: `Please verify admin credentials to cancel invoice ${inv.invoiceNumber}.`
+            });
+        } else {
+            await changeStatus.mutateAsync({ id: inv._id, status: action.status, reason });
+            setAction(null); setReason('');
+        }
     };
 
 
@@ -321,6 +334,12 @@ export default function InvoiceDetailPage() {
                     payments={payments}
                 />
             </div>
+
+            <AdminVerificationModal
+                isOpen={isVerifyModalOpen}
+                onClose={closeVerifyModal}
+                onVerified={handleVerified}
+            />
         </div>
     );
 }

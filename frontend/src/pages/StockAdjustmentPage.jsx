@@ -13,6 +13,8 @@ import Textarea from '../components/ui/Textarea';
 import { useWarehouses } from '../features/warehouses/useWarehouses';
 import { useAdjustStock } from '../features/stock/useStock';
 import { useAuthStore } from '../store/authStore';
+import AdminVerificationModal from '../features/auth/AdminVerificationModal';
+import { useAdminVerify } from '../features/auth/useAdminVerify';
 import { useQuery } from '@tanstack/react-query';
 import { stockApi } from '../features/stock/stockApi';
 
@@ -53,6 +55,7 @@ export default function StockAdjustmentPage() {
 
     const { data: warehousesData } = useWarehouses({ isActive: true });
     const mutation = useAdjustStock();
+    const { isVerifyModalOpen, requestAdminVerify, handleVerified, closeVerifyModal } = useAdminVerify();
 
     const { data: stockData } = useQuery({
         queryKey: ['stock', 'source', warehouseId],
@@ -84,16 +87,21 @@ export default function StockAdjustmentPage() {
         if (items.length === 0) { toast.error('Add at least one adjustment'); return; }
 
         try {
-            await mutation.mutateAsync({
-                warehouseId,
-                items: items.map((i) => ({
-                    productId: i.productId,
-                    adjustmentQuantity: Number(i.adjustmentQuantity),
-                    reason: i.reason,
-                })),
-                notes: notes || undefined,
+            requestAdminVerify(async () => {
+                await mutation.mutateAsync({
+                    warehouseId,
+                    items: items.map((i) => ({
+                        productId: i.productId,
+                        adjustmentQuantity: Number(i.adjustmentQuantity),
+                        reason: i.reason,
+                    })),
+                    notes: notes || undefined,
+                });
+                navigate('/stock');
+            }, {
+                title: "Authorize Stock Adjustment",
+                message: "This adjustment will permanently change inventory levels. Please verify your admin credentials."
             });
-            navigate('/stock');
         } catch { }
     };
 
@@ -210,6 +218,12 @@ export default function StockAdjustmentPage() {
                     </Card>
                 </div>
             </div>
+
+            <AdminVerificationModal
+                isOpen={isVerifyModalOpen}
+                onClose={closeVerifyModal}
+                onVerified={handleVerified}
+            />
         </div>
     );
 }

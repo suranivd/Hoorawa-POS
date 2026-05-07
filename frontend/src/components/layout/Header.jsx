@@ -31,31 +31,34 @@ export default function Header({ onToggleSidebar }) {
     }[user?.role] || 'User';
 
     return (
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0">
+        <header className="h-16 bg-white border-b border-gray-50 flex items-center justify-between px-6 flex-shrink-0">
             <div className="flex items-center gap-3">
                 {/* Hamburger toggle */}
                 <button
                     onClick={onToggleSidebar}
-                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition"
+                    className="p-2 rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-900 transition"
                     aria-label="Toggle sidebar"
                 >
                     <Menu size={20} />
                 </button>
-                <h1 className="text-lg font-semibold text-gray-900">
-                    Welcome, {user?.firstName}
-                </h1>
+                <div className="hidden md:block">
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Workspace</p>
+                    <h1 className="text-sm font-bold text-gray-900">
+                        Main Branch
+                    </h1>
+                </div>
             </div>
 
             <div className="flex items-center gap-4">
-                <div className="flex items-center gap-3 px-3 py-1.5 bg-gray-50 rounded-lg">
-                    <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                <div className="flex items-center gap-3 px-3 py-1.5 bg-gray-50/50 border border-gray-100 rounded-xl">
+                    <div className="w-8 h-8 bg-white border border-gray-100 rounded-full flex items-center justify-center shadow-sm">
                         <button onClick={() => navigate('/profile')}>
-                            <UserIcon className="w-4 h-4 text-primary-600" />
+                            <UserIcon className="w-4 h-4 text-indigo-600" />
                         </button>
                     </div>
-                    <div className="text-sm">
-                        <p className="font-medium text-gray-900">{user?.fullName}</p>
-                        <p className="text-xs text-gray-500">{roleLabel}</p>
+                    <div className="hidden sm:block text-sm">
+                        <p className="font-bold text-gray-900 leading-none">{user?.fullName}</p>
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter mt-1">{roleLabel}</p>
                     </div>
                 </div>
 

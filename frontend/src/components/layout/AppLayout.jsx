@@ -9,12 +9,7 @@ export default function AppLayout() {
     const { user } = useAuthStore();
     const isMobile = useMobile();
     const location = useLocation();
-    const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
-
-    // Sync sidebar state with screen size changes
-    useEffect(() => {
-        setSidebarOpen(!isMobile);
-    }, [isMobile]);
+    const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 1024);
 
     // Close sidebar on route change on mobile
     useEffect(() => {

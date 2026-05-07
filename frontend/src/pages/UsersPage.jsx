@@ -14,6 +14,8 @@ import UserFormModal from '../features/users/UserFormModal';
 import { useUsers, useDeleteUser } from '../features/users/useUsers';
 import { ROLES, getRoleConfig } from '../features/users/roleConfig';
 import { useAuthStore } from '../store/authStore';
+import AdminVerificationModal from '../features/auth/AdminVerificationModal';
+import { useAdminVerify } from '../features/auth/useAdminVerify';
 
 export default function UsersPage() {
     const { user: currentUser } = useAuthStore();
@@ -25,6 +27,7 @@ export default function UsersPage() {
 
     const { data, isLoading } = useUsers(filters);
     const deleteMutation = useDeleteUser();
+    const { isVerifyModalOpen, requestAdminVerify, handleVerified, closeVerifyModal } = useAdminVerify();
 
     const users = data?.data || [];
     const total = data?.total || 0;
@@ -107,8 +110,13 @@ export default function UsersPage() {
     ];
 
     const handleDelete = async () => {
-        await deleteMutation.mutateAsync(deactivating._id);
-        setDeactivating(null);
+        requestAdminVerify(async () => {
+            await deleteMutation.mutateAsync(deactivating._id);
+            setDeactivating(null);
+        }, {
+            title: "Authorize Deactivation",
+            message: `Please verify your admin credentials to deactivate ${deactivating?.firstName}.`
+        });
     };
 
     // Summary counts
@@ -216,6 +224,12 @@ export default function UsersPage() {
                 confirmText="Deactivate"
                 variant="danger"
                 loading={deleteMutation.isPending}
+            />
+
+            <AdminVerificationModal
+                isOpen={isVerifyModalOpen}
+                onClose={closeVerifyModal}
+                onVerified={handleVerified}
             />
         </div>
     );
