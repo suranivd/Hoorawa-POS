@@ -22,7 +22,7 @@ const invoiceLineItemSchema = new mongoose.Schema({
 
     taxRate: { type: Number, default: 0 },
     taxAmount: { type: Number, default: 0 },
-    taxable: { type: Boolean, default: true },
+    taxable: { type: Boolean, default: false },
 
     lineSubtotal: { type: Number, default: 0 },
     lineDiscount: { type: Number, default: 0 },

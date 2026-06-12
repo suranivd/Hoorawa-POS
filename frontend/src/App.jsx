@@ -40,6 +40,7 @@ import BillFromGrnPage from './pages/BillFromGrnPage';
 import DamagesPage from './pages/DamagesPage';
 import SupplierReturnsPage from './pages/SupplierReturnsPage';
 import PaymentsPage from './pages/PaymentsPage';
+import InstallmentsPage from './pages/InstallmentsPage';
 import PaymentFormPage from './pages/PaymentFormPage';
 import PaymentDetailPage from './pages/PaymentDetailPage';
 import BomsPage from './pages/BomsPage';
@@ -162,6 +163,7 @@ function App() {
         <Route path="/expenses" element={<ExpensesPage />} />
         <Route path="/payments/new" element={<PaymentFormPage />} />
         <Route path="/payments/:id" element={<PaymentDetailPage />} />
+        <Route path="/installments" element={<InstallmentsPage />} />
         <Route path="/boms" element={<BomsPage />} />
         <Route path="/boms/new" element={<BomFormPage />} />
         <Route path="/boms/:id" element={<BomDetailPage />} />

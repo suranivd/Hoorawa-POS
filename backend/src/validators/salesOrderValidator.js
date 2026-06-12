@@ -37,6 +37,13 @@ export const createSalesOrderSchema = z.object({
     creditOverrideReason: z.string().optional(),
     cashReceived: z.coerce.number().min(0).optional(),
     changeReturned: z.coerce.number().min(0).optional(),
+    paymentMethod: z.enum(['cash', 'card', 'bank_transfer', 'cheque', 'koko', 'installment']).optional(),
+    bankAccountId: objectId.optional().nullable(),
+    chequeNumber: z.string().optional().nullable(),
+    chequeDate: z.string().optional().nullable(),
+    downPayment: z.coerce.number().min(0).optional(),
+    numberOfInstallments: z.coerce.number().min(1).optional(),
+    installmentInterval: z.enum(['weekly', 'monthly']).optional(),
 });
 
 export const updateSalesOrderSchema = createSalesOrderSchema.partial();

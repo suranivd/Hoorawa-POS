@@ -38,6 +38,7 @@ import chequeRoutes from './routes/chequeRoutes.js';
 import bankRoutes from './routes/bankRoutes.js';
 import fundTransferRoutes from './routes/fundTransferRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
+import installmentRoutes from './routes/installmentRoutes.js';
 
 import reportsRoutes from './routes/reportsRoutes.js';
 
@@ -111,6 +112,7 @@ app.use('/api/cheques', chequeRoutes);
 app.use('/api/bank-accounts', bankRoutes);
 app.use('/api/fund-transfers', fundTransferRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/installments', installmentRoutes);
 
 app.use('/api/reports', reportsRoutes);
 

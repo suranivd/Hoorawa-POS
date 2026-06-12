@@ -70,6 +70,22 @@ export default function PosPage() {
     const [calculatorCashReceived, setCalculatorCashReceived] = useState('');
     const [calculatorChangeReturned, setCalculatorChangeReturned] = useState(0);
 
+    // New payment checkout states
+    const [paymentMethod, setPaymentMethod] = useState('cash');
+    const [selectedBankAccountId, setSelectedBankAccountId] = useState('');
+    const [chequeNumber, setChequeNumber] = useState('');
+    const [chequeDate, setChequeDate] = useState('');
+    const [downPayment, setDownPayment] = useState('');
+    const [numberOfInstallments, setNumberOfInstallments] = useState(3);
+    const [installmentInterval, setInstallmentInterval] = useState('monthly');
+
+    // Fetch bank accounts for checkout payments
+    const { data: bankAccountsRes } = useQuery({
+        queryKey: ['bank-accounts'],
+        queryFn: async () => (await api.get('/bank-accounts')).data
+    });
+    const bankAccounts = bankAccountsRes?.data || [];
+
     // Direct Printing
     const [recentInvoice, setRecentInvoice] = useState(null);
     const [paymentForPrint, setPaymentForPrint] = useState([]);
@@ -297,7 +313,7 @@ export default function PosPage() {
 
     const fmt = (n) => new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR', minimumFractionDigits: 2 }).format(n || 0);
 
-    const handleCheckout = async (saveAsDraft = false, cashAmt = null, changeAmt = null) => {
+    const handleCheckout = async (saveAsDraft = false, cashAmt = null, changeAmt = null, overridePaymentMethod = null) => {
         let finalCustomerId = customerId;
 
         // Auto-add customer if not selected but name typed
@@ -325,7 +341,9 @@ export default function PosPage() {
         if (cart.length === 0) { toast.error('Cart is empty'); return; }
         if (!activeSession) { toast.error('You must open the cash register first'); setIsSessionModalOpen(true); return; }
 
-        if (!saveAsDraft && cashAmt === null) {
+        const selectedMethod = overridePaymentMethod || paymentMethod;
+
+        if (!saveAsDraft && cashAmt === null && !overridePaymentMethod) {
             setCalculatorCashReceived('');
             setCalculatorChangeReturned(0);
             setIsCalculatorModalOpen(true);
@@ -348,6 +366,15 @@ export default function PosPage() {
             status: saveAsDraft ? 'draft' : 'approved',
             cashReceived: saveAsDraft ? undefined : (cashAmt || 0),
             changeReturned: saveAsDraft ? undefined : (changeAmt || 0),
+            
+            // New payment fields:
+            paymentMethod: saveAsDraft ? undefined : selectedMethod,
+            bankAccountId: (saveAsDraft || !['card', 'bank_transfer', 'koko'].includes(selectedMethod)) ? undefined : selectedBankAccountId,
+            chequeNumber: (saveAsDraft || selectedMethod !== 'cheque') ? undefined : chequeNumber,
+            chequeDate: (saveAsDraft || selectedMethod !== 'cheque') ? undefined : chequeDate,
+            downPayment: (saveAsDraft || selectedMethod !== 'installment') ? undefined : (parseFloat(downPayment) || 0),
+            numberOfInstallments: (saveAsDraft || selectedMethod !== 'installment') ? undefined : (parseInt(numberOfInstallments) || 3),
+            installmentInterval: (saveAsDraft || selectedMethod !== 'installment') ? undefined : installmentInterval,
         };
 
         try {
@@ -373,6 +400,15 @@ export default function PosPage() {
                 setCustomerPhone('');
                 setOrderDiscountPercent(0);
                 setOrderDiscountAmount(0);
+
+                // Reset payment states
+                setPaymentMethod('cash');
+                setSelectedBankAccountId('');
+                setChequeNumber('');
+                setChequeDate('');
+                setDownPayment('');
+                setNumberOfInstallments(3);
+                setInstallmentInterval('monthly');
 
                 // Navigate to receipt page - auto-triggers print dialog
                 if (fetchedInvoiceId) {
@@ -841,89 +877,238 @@ export default function PosPage() {
             <Modal
                 isOpen={isCalculatorModalOpen}
                 onClose={() => setIsCalculatorModalOpen(false)}
-                title="POS Cash Payment Calculator"
+                title="POS Checkout Payment"
                 size="md"
             >
                 <div className="p-6 space-y-6">
                     {/* Grand Total Display */}
-                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100 flex justify-between items-center">
+                    <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl p-5 border border-indigo-100 flex justify-between items-center">
                         <div>
-                            <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider">Total Payable</p>
+                            <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">Total Payable</p>
                             <p className="text-3xl font-extrabold text-indigo-950 mt-1">{fmt(totals.grandTotal)}</p>
                         </div>
-                        <div className="bg-indigo-500 text-white rounded-lg p-2.5 shadow-md shadow-indigo-200">
+                        <div className="bg-indigo-600 text-white rounded-lg p-2.5 shadow-md">
                             <CreditCard size={28} />
                         </div>
                     </div>
 
-                    {/* Cash Received Input */}
+                    {/* Payment Method Selector */}
                     <div className="space-y-2">
-                        <label className="block text-sm font-semibold text-gray-700">Cash Received (LKR)</label>
-                        <div className="relative">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-lg">Rs.</span>
-                            <input
-                                type="number"
-                                step="any"
-                                autoFocus
-                                placeholder="0.00"
-                                value={calculatorCashReceived}
-                                onChange={(e) => {
-                                    const val = e.target.value;
-                                    setCalculatorCashReceived(val);
-                                    const parsed = parseFloat(val) || 0;
-                                    setCalculatorChangeReturned(Math.max(0, parsed - totals.grandTotal));
-                                }}
-                                className="w-full bg-white border border-gray-300 rounded-lg py-3.5 pl-12 pr-4 text-2xl font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-sm"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Quick Cash Buttons */}
-                    <div className="space-y-2">
-                        <span className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Quick Cash Shortcuts</span>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setCalculatorCashReceived(totals.grandTotal.toString());
-                                    setCalculatorChangeReturned(0);
-                                }}
-                                className="py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-lg transition duration-200 border border-gray-200 active:scale-95"
-                            >
-                                Exact Cash
-                            </button>
-                            {[1000, 2000, 5000, 10000].map((denom) => (
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">Payment Method</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {[
+                                { id: 'cash', label: 'Cash' },
+                                { id: 'card', label: 'Card' },
+                                { id: 'bank_transfer', label: 'Bank Transfer' },
+                                { id: 'cheque', label: 'Cheque' },
+                                { id: 'koko', label: 'Koko (BNPL)' },
+                                { id: 'installment', label: 'Installment' }
+                            ].map((m) => (
                                 <button
-                                    key={denom}
+                                    key={m.id}
                                     type="button"
-                                    onClick={() => {
-                                        setCalculatorCashReceived(denom.toString());
-                                        setCalculatorChangeReturned(Math.max(0, denom - totals.grandTotal));
-                                    }}
-                                    className="py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg transition duration-200 border border-indigo-100 active:scale-95"
+                                    onClick={() => setPaymentMethod(m.id)}
+                                    className={`py-2 px-3 text-xs font-bold rounded-lg border transition duration-200 ${
+                                        paymentMethod === m.id
+                                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                                            : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                                    }`}
                                 >
-                                    {denom.toLocaleString('en-LK')}
+                                    {m.label}
                                 </button>
                             ))}
                         </div>
                     </div>
 
-                    {/* Change Returned Display */}
-                    <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-100 flex justify-between items-center">
-                        <div>
-                            <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Change to Return</p>
-                            <p className="text-3xl font-extrabold text-emerald-950 mt-1">{fmt(calculatorChangeReturned)}</p>
-                        </div>
-                        <div className="bg-emerald-500 text-white rounded-lg p-2.5 shadow-md shadow-emerald-200">
-                            <CheckCircle size={28} />
-                        </div>
-                    </div>
+                    {/* Dynamic Inputs based on Method */}
+                    {paymentMethod === 'cash' && (
+                        <div className="space-y-4">
+                            {/* Cash Received Input */}
+                            <div className="space-y-2">
+                                <label className="block text-sm font-semibold text-gray-700">Cash Received (LKR)</label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-lg">Rs.</span>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        autoFocus
+                                        placeholder="0.00"
+                                        value={calculatorCashReceived}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setCalculatorCashReceived(val);
+                                            const parsed = parseFloat(val) || 0;
+                                            setCalculatorChangeReturned(Math.max(0, parsed - totals.grandTotal));
+                                        }}
+                                        className="w-full bg-white border border-gray-300 rounded-lg py-3 pl-12 pr-4 text-xl font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-sm"
+                                    />
+                                </div>
+                            </div>
 
-                    {/* Insufficient Cash Warning */}
-                    {calculatorCashReceived && (parseFloat(calculatorCashReceived) || 0) < totals.grandTotal && (
-                        <div className="flex items-center gap-2 text-sm font-semibold text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
-                            <AlertCircle size={18} />
-                            <span>Cash received is less than total payable!</span>
+                            {/* Quick Cash Buttons */}
+                            <div className="space-y-2">
+                                <span className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Quick Cash Shortcuts</span>
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setCalculatorCashReceived(totals.grandTotal.toString());
+                                            setCalculatorChangeReturned(0);
+                                        }}
+                                        className="py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-lg transition border border-gray-200 active:scale-95"
+                                    >
+                                        Exact Cash
+                                    </button>
+                                    {[1000, 2000, 5000, 10000].map((denom) => (
+                                        <button
+                                            key={denom}
+                                            type="button"
+                                            onClick={() => {
+                                                setCalculatorCashReceived(denom.toString());
+                                                setCalculatorChangeReturned(Math.max(0, denom - totals.grandTotal));
+                                            }}
+                                            className="py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg transition border border-indigo-100 active:scale-95"
+                                        >
+                                            {denom.toLocaleString('en-LK')}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Change Returned Display */}
+                            <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100 flex justify-between items-center">
+                                <div>
+                                    <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Change to Return</p>
+                                    <p className="text-2xl font-extrabold text-emerald-950 mt-1">{fmt(calculatorChangeReturned)}</p>
+                                </div>
+                                <div className="bg-emerald-500 text-white rounded-lg p-2 shadow-md">
+                                    <CheckCircle size={20} />
+                                </div>
+                            </div>
+
+                            {/* Insufficient Cash Warning */}
+                            {calculatorCashReceived && (parseFloat(calculatorCashReceived) || 0) < totals.grandTotal && (
+                                <div className="flex items-center gap-2 text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+                                    <AlertCircle size={16} />
+                                    <span>Cash received is less than total payable!</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {['card', 'bank_transfer', 'koko'].includes(paymentMethod) && (
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <label className="block text-sm font-semibold text-gray-700">Select Bank Account</label>
+                                <select
+                                    value={selectedBankAccountId}
+                                    onChange={(e) => setSelectedBankAccountId(e.target.value)}
+                                    className="w-full bg-white border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-sm"
+                                >
+                                    <option value="">-- Choose Account --</option>
+                                    {bankAccounts.map((b) => (
+                                        <option key={b._id} value={b._id}>
+                                            {b.bankName} - {b.accountName} ({b.accountNumber})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-900 flex items-start gap-2">
+                                <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-blue-600" />
+                                <span>Funds will be automatically credited to the chosen account and tally with the bank balance.</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {paymentMethod === 'cheque' && (
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-semibold text-gray-700">Cheque Number</label>
+                                    <input
+                                        type="text"
+                                        value={chequeNumber}
+                                        onChange={(e) => setChequeNumber(e.target.value)}
+                                        placeholder="CHQ-123456"
+                                        className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-sm"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-semibold text-gray-700">Cheque Date</label>
+                                    <input
+                                        type="date"
+                                        value={chequeDate}
+                                        onChange={(e) => setChequeDate(e.target.value)}
+                                        className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-sm"
+                                    />
+                                </div>
+                            </div>
+                            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-900 flex items-start gap-2">
+                                <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-blue-600" />
+                                <span>Cheque details will be registered in the Cheque Registry as Pending until deposited and cleared.</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {paymentMethod === 'installment' && (
+                        <div className="space-y-4">
+                            {!customerId && !customerSearch ? (
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-xs text-red-900 flex items-start gap-2">
+                                    <AlertCircle size={18} className="mt-0.5 flex-shrink-0 text-red-600" />
+                                    <div>
+                                        <p className="font-bold">Customer Required</p>
+                                        <p className="mt-1">Installment plans must be linked to a specific customer profile. Please select or type a customer name in the top bar before proceeding.</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-semibold text-gray-700">Down Payment (LKR)</label>
+                                            <input
+                                                type="number"
+                                                value={downPayment}
+                                                onChange={(e) => setDownPayment(e.target.value)}
+                                                placeholder="0.00"
+                                                className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-sm"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-semibold text-gray-700">Installments Count</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={numberOfInstallments}
+                                                onChange={(e) => setNumberOfInstallments(e.target.value)}
+                                                className="w-full bg-white border border-gray-300 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-sm"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-semibold text-gray-700">Interval</label>
+                                        <select
+                                            value={installmentInterval}
+                                            onChange={(e) => setInstallmentInterval(e.target.value)}
+                                            className="w-full bg-white border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition shadow-sm"
+                                        >
+                                            <option value="monthly">Monthly</option>
+                                            <option value="weekly">Weekly</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Estimated calculations */}
+                                    <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 text-xs space-y-1.5 text-indigo-950 font-semibold">
+                                        <div className="flex justify-between">
+                                            <span>Remaining Balance:</span>
+                                            <span>{fmt(Math.max(0, totals.grandTotal - (parseFloat(downPayment) || 0)))}</span>
+                                        </div>
+                                        <div className="flex justify-between border-t border-indigo-100 pt-1.5 mt-1.5 text-sm text-indigo-700">
+                                            <span>Est. Payment per Installment:</span>
+                                            <span>{fmt(Math.max(0, (totals.grandTotal - (parseFloat(downPayment) || 0)) / (parseInt(numberOfInstallments) || 3)))}</span>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
 
@@ -939,13 +1124,25 @@ export default function PosPage() {
                         <Button
                             variant="primary"
                             className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white"
-                            disabled={!calculatorCashReceived || (parseFloat(calculatorCashReceived) || 0) < totals.grandTotal || createOrder.isLoading}
+                            disabled={
+                                createOrder.isPending ||
+                                (paymentMethod === 'cash' && (!calculatorCashReceived || (parseFloat(calculatorCashReceived) || 0) < totals.grandTotal)) ||
+                                (['card', 'bank_transfer', 'koko'].includes(paymentMethod) && !selectedBankAccountId) ||
+                                (paymentMethod === 'cheque' && (!chequeNumber || !chequeDate)) ||
+                                (paymentMethod === 'installment' && (!customerId && !customerSearch))
+                            }
                             onClick={async () => {
                                 setIsCalculatorModalOpen(false);
-                                await handleCheckout(false, parseFloat(calculatorCashReceived), calculatorChangeReturned);
+                                if (paymentMethod === 'cash') {
+                                    await handleCheckout(false, parseFloat(calculatorCashReceived), calculatorChangeReturned);
+                                } else if (paymentMethod === 'installment') {
+                                    await handleCheckout(false, parseFloat(downPayment) || 0, 0);
+                                } else {
+                                    await handleCheckout(false, 0, 0);
+                                }
                             }}
                         >
-                            {createOrder.isLoading ? 'Checking out...' : 'Confirm & Pay'}
+                            {createOrder.isPending ? 'Checking out...' : 'Confirm & Pay'}
                         </Button>
                     </div>
                 </div>

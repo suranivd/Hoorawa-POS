@@ -2,7 +2,51 @@ import asyncHandler from 'express-async-handler';
 import mongoose from 'mongoose';
 import Product from '../models/Product.js';
 
+async function resolveCategoryAndBrand(req) {
+    const { categoryName, brandName } = req.body;
+
+    if (categoryName && typeof categoryName === 'string' && categoryName.trim() !== '') {
+        const Category = mongoose.model('Category');
+        let category = await Category.findOne({ name: { $regex: new RegExp(`^${categoryName.trim()}$`, 'i') } });
+        if (!category) {
+            let code = categoryName.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
+            if (!code) code = `CAT-${Math.floor(1000 + Math.random() * 9000)}`;
+            const existingCode = await Category.findOne({ code });
+            if (existingCode) {
+                code = `${code.slice(0, 10)}-${Math.floor(100 + Math.random() * 900)}`;
+            }
+            category = await Category.create({
+                name: categoryName.trim(),
+                code,
+                createdBy: req.user?._id
+            });
+        }
+        req.body.categoryId = category._id;
+    }
+
+    if (brandName !== undefined) {
+        if (brandName && typeof brandName === 'string' && brandName.trim() !== '') {
+            const Brand = mongoose.model('Brand');
+            let brand = await Brand.findOne({ name: { $regex: new RegExp(`^${brandName.trim()}$`, 'i') } });
+            if (!brand) {
+                brand = await Brand.create({
+                    name: brandName.trim(),
+                    createdBy: req.user?._id
+                });
+            }
+            req.body.brandId = brand._id;
+        } else {
+            req.body.brandId = null;
+        }
+    }
+
+    if (!req.body.unitOfMeasure) {
+        req.body.unitOfMeasure = 'pcs';
+    }
+}
+
 export const createProduct = asyncHandler(async (req, res) => {
+    await resolveCategoryAndBrand(req);
     const product = await Product.create({
         ...req.body,
         createdBy: req.user._id,
@@ -113,6 +157,7 @@ export const getProductById = asyncHandler(async (req, res) => {
 });
 
 export const updateProduct = asyncHandler(async (req, res) => {
+    await resolveCategoryAndBrand(req);
     const product = await Product.findByIdAndUpdate(
         req.params.id,
         { ...req.body, updatedBy: req.user._id },

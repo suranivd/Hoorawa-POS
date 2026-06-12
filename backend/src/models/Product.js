@@ -132,8 +132,8 @@ const productSchema = new mongoose.Schema(
 
         // Tax
         tax: {
-            taxable: { type: Boolean, default: true },
-            taxRate: { type: Number, default: 18, min: 0, max: 100 }, // SL VAT default 18%
+            taxable: { type: Boolean, default: false },
+            taxRate: { type: Number, default: 0, min: 0, max: 100 }, // SL VAT default 0%
             hsCode: { type: String, trim: true },
         },
 

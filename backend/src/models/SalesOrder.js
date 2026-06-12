@@ -46,7 +46,7 @@ const lineItemSchema = new mongoose.Schema(
 
         taxRate: { type: Number, default: 0, min: 0 },
         taxAmount: { type: Number, default: 0, min: 0 },
-        taxable: { type: Boolean, default: true },
+        taxable: { type: Boolean, default: false },
 
         lineSubtotal: { type: Number, default: 0 }, // qty × unitPrice
         lineDiscount: { type: Number, default: 0 },

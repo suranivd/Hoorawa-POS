@@ -14,6 +14,7 @@ import { generateInvoiceFromOrders, updateCustomerBalance } from './invoiceContr
  * Create Sales Order
  */
 export const createSalesOrder = asyncHandler(async (req, res) => {
+    console.log("[DEBUG] createSalesOrder req.body:", req.body);
     const {
         customerId, items, shippingAddressLabel, creditOverride, creditOverrideReason,
         ...rest
@@ -79,7 +80,7 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
             discountPercent: item.discountPercent || 0,
             discountAmount: item.discountAmount || 0,
             taxRate: item.taxRate ?? (product.tax?.taxRate || 0),
-            taxable: item.taxable ?? (product.tax?.taxable ?? true),
+            taxable: item.taxable ?? (product.tax?.taxable ?? false),
             notes: item.notes,
         });
     }
@@ -199,46 +200,185 @@ export const createSalesOrder = asyncHandler(async (req, res) => {
                     session,
                 });
                 
-                // Fetch Payment model dynamically to avoid circular dependencies if any
+                // Fetch models dynamically to avoid circular dependencies
                 const Payment = (await import('../models/Payment.js')).default;
                 const PosSession = (await import('../models/PosSession.js')).default;
+                const BankAccount = (await import('../models/BankAccount.js')).default;
+                const Cheque = (await import('../models/Cheque.js')).default;
                 
-                const payment = new Payment({
-                    direction: 'received',
-                    customerId: order.customerId,
-                    partyName: order.customerSnapshot.name,
-                    amount: invoice.grandTotal,
-                    method: 'cash',
-                    allocations: [{
-                        documentType: 'invoice',
-                        documentId: invoice._id,
-                        documentNumber: invoice.invoiceNumber,
-                        amount: invoice.grandTotal
-                    }],
-                    status: 'cleared',
-                    receivedBy: req.user._id,
-                    createdBy: req.user._id
-                });
-                await payment.save({ session });
+                const {
+                    paymentMethod = 'cash',
+                    bankAccountId,
+                    chequeNumber,
+                    chequeDate,
+                    downPayment = 0,
+                    numberOfInstallments = 3,
+                    installmentInterval = 'monthly'
+                } = req.body;
                 
-                // Update Invoice payment status
-                invoice.amountPaid = invoice.grandTotal;
-                invoice.balanceDue = 0;
-                invoice.paymentStatus = 'paid';
-                invoice.fullyPaidAt = new Date();
-                invoice.cashReceived = order.cashReceived;
-                invoice.changeReturned = order.changeReturned;
-                await invoice.save({ session });
-
-                // Recalculate customer credit balance to reflect payment
-                await updateCustomerBalance(order.customerId, session);
-                
-                // Update PosSession cashSales
-                const activeSession = await PosSession.findOne({ userId: req.user._id, status: 'open' }).session(session);
-                if (activeSession) {
-                    activeSession.cashSales += invoice.grandTotal;
-                    await activeSession.save({ session });
+                if (paymentMethod === 'installment') {
+                    // Handle Installment payment method
+                    let paidAmount = 0;
+                    if (downPayment > 0) {
+                        const payment = new Payment({
+                            direction: 'received',
+                            customerId: order.customerId,
+                            partyName: order.customerSnapshot.name,
+                            amount: downPayment,
+                            method: 'cash', // Default to cash for down payment
+                            allocations: [{
+                                documentType: 'invoice',
+                                documentId: invoice._id,
+                                documentNumber: invoice.invoiceNumber,
+                                amount: downPayment
+                            }],
+                            status: 'cleared',
+                            receivedBy: req.user._id,
+                            createdBy: req.user._id
+                        });
+                        await payment.save({ session });
+                        paidAmount = downPayment;
+                        
+                        // Update PosSession cashSales with down payment
+                        const activeSession = await PosSession.findOne({ userId: req.user._id, status: 'open' }).session(session);
+                        if (activeSession) {
+                            activeSession.cashSales += downPayment;
+                            await activeSession.save({ session });
+                        }
+                    }
+                    
+                    invoice.amountPaid = paidAmount;
+                    invoice.balanceDue = +(invoice.grandTotal - paidAmount).toFixed(2);
+                    invoice.paymentStatus = invoice.balanceDue === 0 ? 'paid' : (paidAmount > 0 ? 'partially_paid' : 'unpaid');
+                    if (invoice.balanceDue === 0) invoice.fullyPaidAt = new Date();
+                    invoice.cashReceived = paidAmount > 0 ? order.cashReceived : undefined;
+                    invoice.changeReturned = paidAmount > 0 ? order.changeReturned : undefined;
+                    await invoice.save({ session });
+                    
+                    // Generate Installment Plan
+                    const Installment = (await import('../models/Installment.js')).default;
+                    const remainingAmount = invoice.balanceDue;
+                    const schedule = [];
+                    const installmentAmount = +(remainingAmount / numberOfInstallments).toFixed(2);
+                    
+                    for (let i = 1; i <= numberOfInstallments; i++) {
+                        const dueDate = new Date();
+                        if (installmentInterval === 'weekly') {
+                            dueDate.setDate(dueDate.getDate() + (i * 7));
+                        } else {
+                            dueDate.setMonth(dueDate.getMonth() + i);
+                        }
+                        
+                        const currentAmount = (i === numberOfInstallments)
+                            ? +(remainingAmount - (installmentAmount * (numberOfInstallments - 1))).toFixed(2)
+                            : installmentAmount;
+                            
+                        schedule.push({
+                            installmentNo: i,
+                            dueDate,
+                            amount: currentAmount,
+                            paidAmount: 0,
+                            status: 'pending'
+                        });
+                    }
+                    
+                    const installmentPlan = new Installment({
+                        customerId: order.customerId,
+                        invoiceId: invoice._id,
+                        customerName: order.customerSnapshot.name,
+                        customerPhone: order.customerSnapshot.phone,
+                        totalAmount: invoice.grandTotal,
+                        downPayment,
+                        remainingAmount,
+                        numberOfInstallments,
+                        installmentInterval,
+                        schedule,
+                        status: remainingAmount === 0 ? 'completed' : 'active',
+                        createdBy: req.user._id
+                    });
+                    await installmentPlan.save({ session });
+                    
+                } else {
+                    // Handle Cash, Card, Bank Transfer, Cheque, Koko
+                    const isBankLinked = ['card', 'bank_transfer', 'koko'].includes(paymentMethod);
+                    const paymentStatus = ['cash', 'card', 'bank_transfer', 'koko'].includes(paymentMethod) ? 'cleared' : 'confirmed';
+                    
+                    const payment = new Payment({
+                        direction: 'received',
+                        customerId: order.customerId,
+                        partyName: order.customerSnapshot.name,
+                        amount: invoice.grandTotal,
+                        method: paymentMethod,
+                        chequeNumber: paymentMethod === 'cheque' ? chequeNumber : undefined,
+                        chequeDate: paymentMethod === 'cheque' ? chequeDate : undefined,
+                        chequeStatus: paymentMethod === 'cheque' ? 'pending' : undefined,
+                        bankAccountId: isBankLinked ? bankAccountId : undefined,
+                        allocations: [{
+                            documentType: 'invoice',
+                            documentId: invoice._id,
+                            documentNumber: invoice.invoiceNumber,
+                            amount: invoice.grandTotal
+                        }],
+                        status: paymentStatus,
+                        receivedBy: req.user._id,
+                        createdBy: req.user._id
+                    });
+                    await payment.save({ session });
+                    
+                    // If Bank-linked, update bank balance
+                    console.log("[DEBUG] POS paymentMethod:", paymentMethod);
+                    console.log("[DEBUG] POS bankAccountId:", bankAccountId);
+                    console.log("[DEBUG] POS isBankLinked:", isBankLinked);
+                    if (isBankLinked && bankAccountId) {
+                        const bankAcc = await BankAccount.findById(bankAccountId).session(session);
+                        console.log("[DEBUG] POS bankAcc found in DB:", !!bankAcc);
+                        if (bankAcc) {
+                            console.log("[DEBUG] POS old balance:", bankAcc.currentBalance);
+                            bankAcc.currentBalance = +(bankAcc.currentBalance + invoice.grandTotal).toFixed(2);
+                            await bankAcc.save({ session });
+                            console.log("[DEBUG] POS new balance saved:", bankAcc.currentBalance);
+                        }
+                    }
+                    
+                    // If Cheque, create registry record
+                    if (paymentMethod === 'cheque') {
+                        const cheque = new Cheque({
+                            chequeNumber,
+                            chequeDate,
+                            amount: invoice.grandTotal,
+                            bankName: 'POS Cheque',
+                            direction: 'incoming',
+                            payeeName: order.customerSnapshot.name,
+                            paymentId: payment._id,
+                            customerId: order.customerId,
+                            createdBy: req.user._id,
+                            status: 'pending',
+                            notes: `Created from POS payment ${payment.paymentNumber}`
+                        });
+                        await cheque.save({ session });
+                    }
+                    
+                    // Update Invoice details
+                    invoice.amountPaid = invoice.grandTotal;
+                    invoice.balanceDue = 0;
+                    invoice.paymentStatus = 'paid';
+                    invoice.fullyPaidAt = new Date();
+                    invoice.cashReceived = paymentMethod === 'cash' ? order.cashReceived : undefined;
+                    invoice.changeReturned = paymentMethod === 'cash' ? order.changeReturned : undefined;
+                    await invoice.save({ session });
+                    
+                    // Update POS register ONLY for physical cash
+                    if (paymentMethod === 'cash') {
+                        const activeSession = await PosSession.findOne({ userId: req.user._id, status: 'open' }).session(session);
+                        if (activeSession) {
+                            activeSession.cashSales += invoice.grandTotal;
+                            await activeSession.save({ session });
+                        }
+                    }
                 }
+                
+                // Recalculate customer balance
+                await updateCustomerBalance(order.customerId, session);
             }
         });
     } catch (err) {
@@ -367,7 +507,7 @@ export const updateSalesOrder = asyncHandler(async (req, res) => {
                 listPrice: product?.basePrice,
                 unitPrice: item.unitPrice ?? product?.basePrice,
                 taxRate: item.taxRate ?? (product?.tax?.taxRate || 0),
-                taxable: item.taxable ?? (product?.tax?.taxable ?? true),
+                taxable: item.taxable ?? (product?.tax?.taxable ?? false),
             };
         });
     }

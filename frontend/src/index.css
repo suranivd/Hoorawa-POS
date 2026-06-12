@@ -47,3 +47,13 @@ body {
   }
 
 }
+
+/* Fix native date input styling on iOS/Safari */
+input[type="date"] {
+  min-height: 42px;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  min-height: 1.5em;
+  display: flex;
+  align-items: center;
+}

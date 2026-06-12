@@ -44,8 +44,8 @@ export default function ProductFormModal({ isOpen, onClose, product = null }) {
         defaultValues: {
             type: 'trading',
             status: 'active',
-            taxable: true,
-            taxRate: 18,
+            taxable: false,
+            taxRate: 0,
             sellable: true,
             allowBackorder: false,
             minimumOrderQuantity: 1,
@@ -56,6 +56,8 @@ export default function ProductFormModal({ isOpen, onClose, product = null }) {
             profitPercentage: 0,
             basePrice: 0,
             tierPricing: [],
+            categoryName: '',
+            brandName: '',
         },
     });
 
@@ -89,13 +91,15 @@ export default function ProductFormModal({ isOpen, onClose, product = null }) {
                 description: product.description || '',
                 categoryId: product.categoryId?._id || product.categoryId || '',
                 brandId: product.brandId?._id || product.brandId || '',
+                categoryName: product.categoryId?.name || '',
+                brandName: product.brandId?.name || '',
                 type: product.type || 'trading',
                 unitOfMeasure: product.unitOfMeasure || '',
                 basePrice: product.basePrice || 0,
                 mrp: product.mrp || 0,
                 callPrice: product.callPrice || 0,
-                taxable: product.tax?.taxable ?? true,
-                taxRate: product.tax?.taxRate ?? 18,
+                taxable: product.tax?.taxable ?? false,
+                taxRate: product.tax?.taxRate ?? 0,
                 hsCode: product.tax?.hsCode || '',
                 minimumLevel: product.stockLevels?.minimumLevel || 0,
                 reorderLevel: product.stockLevels?.reorderLevel || 0,
@@ -125,8 +129,8 @@ export default function ProductFormModal({ isOpen, onClose, product = null }) {
             reset({
                 type: 'trading',
                 status: 'active',
-                taxable: true,
-                taxRate: 18,
+                taxable: false,
+                taxRate: 0,
                 sellable: true,
                 allowBackorder: false,
                 minimumOrderQuantity: 1,
@@ -139,6 +143,8 @@ export default function ProductFormModal({ isOpen, onClose, product = null }) {
                 productNature: 'single',
                 variations: [],
                 comboItems: [],
+                categoryName: '',
+                brandName: '',
             });
         }
         setActiveTab('basic');
@@ -151,15 +157,17 @@ export default function ProductFormModal({ isOpen, onClose, product = null }) {
             shortName: data.shortName || undefined,
             sku: data.sku || undefined,
             barcode: data.barcode || undefined,
-            productType: data.productType,
+            productType: data.productType || product?.productType || 'finished_good',
             canBeSold: data.canBeSold,
             canBePurchased: data.canBePurchased,
             canBeManufactured: data.canBeManufactured,
             description: data.description || undefined,
-            categoryId: data.categoryId,
+            categoryId: data.categoryId || undefined,
             brandId: data.brandId || undefined,
+            categoryName: data.categoryName,
+            brandName: data.brandName || undefined,
             type: data.type,
-            unitOfMeasure: data.unitOfMeasure,
+            unitOfMeasure: data.unitOfMeasure || product?.unitOfMeasure || 'pcs',
             basePrice: data.basePrice,
             purchasePrice: data.buyingPrice || 0,
             mrp: data.mrp || undefined,
@@ -292,41 +300,33 @@ export default function ProductFormModal({ isOpen, onClose, product = null }) {
                                 />
                             </div>
                             <div className="grid grid-cols-3 gap-4">
-                                <Select
-                                    label="Category"
-                                    required
-                                    error={errors.categoryId?.message}
-                                    options={categoryOptions}
-                                    {...register('categoryId')}
-                                />
-                                <Select
-                                    label="Brand"
-                                    error={errors.brandId?.message}
-                                    options={brandOptions}
-                                    {...register('brandId')}
-                                />
-                                <Select
-                                    label="Product Type" required
-                                    options={[
-                                        { value: 'finished_good', label: 'Finished Good (sellable)' },
-                                        { value: 'raw_material', label: 'Raw Material (for production)' },
-                                        { value: 'semi_finished', label: 'Semi-Finished (intermediate)' },
-                                        { value: 'packaging', label: 'Packaging Material' },
-                                        { value: 'consumable', label: 'Consumable' },
-                                        { value: 'service', label: 'Service' },
-                                    ]}
-                                    error={errors.productType?.message}
-                                    {...register('productType')}
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <Select
-                                    label="Unit of Measure"
-                                    required
-                                    error={errors.unitOfMeasure?.message}
-                                    options={uomOptions}
-                                    {...register('unitOfMeasure')}
-                                />
+                                <div className="relative">
+                                    <Input
+                                        label="Category"
+                                        required
+                                        list="product-categories-datalist"
+                                        error={errors.categoryName?.message}
+                                        {...register('categoryName')}
+                                    />
+                                    <datalist id="product-categories-datalist">
+                                        {(categoriesData?.data || []).map((c) => (
+                                            <option key={c._id} value={c.name} />
+                                        ))}
+                                    </datalist>
+                                </div>
+                                <div className="relative">
+                                    <Input
+                                        label="Brand"
+                                        list="product-brands-datalist"
+                                        error={errors.brandName?.message}
+                                        {...register('brandName')}
+                                    />
+                                    <datalist id="product-brands-datalist">
+                                        {(brandsData?.data || []).map((b) => (
+                                            <option key={b._id} value={b.name} />
+                                        ))}
+                                    </datalist>
+                                </div>
                                 <Select
                                     label="Status"
                                     required

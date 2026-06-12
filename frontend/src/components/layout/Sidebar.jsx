@@ -38,6 +38,7 @@ const menuItems = [
             { label: 'Wholesale Prices', path: '/wholesale-prices' },
             { label: 'Invoices', path: '/invoices' },
             { label: 'Payments Received', path: '/payments' },
+            { label: 'Installments', path: '/installments' },
         ],
     },
     {
